@@ -1,0 +1,29 @@
+# Copyright (C) 2017-Present Pivotal Software, Inc. All rights reserved.
+# This program and the accompanying materials are made available under the terms of the under the Apache License, Version 2.0 (the "License”); you may not use this file except in compliance with the License. You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+---
+name: create-uaa-clients
+packages: []
+templates:
+  run.sh.erb: bin/run
+
+consumes:
+- name: cloud_controller
+  type: cloud_controller
+
+properties:
+  cf.ssl_skip_cert_verify:
+    description: 'Skip SSL validation when connecting to Cloud Foundry API'
+    default: false
+
+  uaa.admin_client_id:
+    description: 'The UAA admin client id (required scope is `uaa.admin`).'
+    default: 'admin'
+  uaa.admin_client_secret:
+    description: 'The UAA admin client secret'
+  uaa.grafana_client_id:
+    description: 'The UAA broker oauth2 client id. Put an existing client id or one you want the job to create. Note the client required scopes: `openid`.'
+    default: 'grafana'
+  uaa.grafana_client_secret:
+    description: 'The UAA broker oauth2 client secret'

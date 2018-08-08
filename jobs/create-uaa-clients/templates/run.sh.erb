@@ -1,0 +1,73 @@
+#!/bin/bash
+
+# Copyright (C) 2017-Present Pivotal Software, Inc. All rights reserved.
+# This program and the accompanying materials are made available under the terms of the under the Apache License, Version 2.0 (the "License”); you may not use this file except in compliance with the License. You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+set -e # exit immediately if a simple command exits with a non-zero status
+set -u # report the usage of uninitialized variables
+set +x
+<%
+  uaa_admin_id = p("uaa.admin_client_id")
+  uaa_admin_secret = p("uaa.admin_client_secret")
+  grafana_id = p("uaa.grafana_client_id")
+  grafana_secret = p("uaa.grafana_client_secret")
+  sys_domain = link("cloud_controller").p("system_domain")
+  skip_ssl_flag=""
+  if p("cf.ssl_skip_cert_verify")
+    skip_ssl_flag="-k"
+  end
+%>
+
+# Create UAA clients if not already exists
+ACCESS_TOKEN=$(\
+curl -s -D - <%= skip_ssl_flag %> \
+-u <%= uaa_admin_id %>:<%= uaa_admin_secret %> \
+-H "Accept:application/json" \
+-X POST 'https://uaa.<%= sys_domain %>/oauth/token' \
+-d 'grant_type=client_credentials&response_type=token&client_id=<%= uaa_admin_id %>' \
+| sed -n 's/.*access_token":"\([^"]*\).*/\1/p' \
+)
+
+createClient () {
+    local CLIENT_ID=$1
+    local CLIENT_SECRET=$2
+
+    CLIENT_EXISTS=$(\
+    curl -s <%= skip_ssl_flag %> -w "%{http_code}" -o /dev/null \
+    -H "Authorization:Bearer $ACCESS_TOKEN" \
+    -H"Content-Type:application/json" \
+    -H"Accept:application/json" \
+    -X GET https://uaa.<%= sys_domain %>/oauth/clients/${CLIENT_ID} \
+    )
+
+    # Since we cannot update client_id and client_secret without keeping track of previous state we delete the old client, and recreate it.
+    if [ $CLIENT_EXISTS != "404" ]; then
+       echo "Deleting old OAuth2 client: $CLIENT_ID"
+       curl -s <%= skip_ssl_flag %> -w "%{http_code}" \
+        -H "Authorization:Bearer $ACCESS_TOKEN" \
+        -H"Content-Type:application/json" \
+        -H"Accept:application/json" \
+        -XDELETE \
+        https://uaa.<%= sys_domain %>/oauth/clients/$CLIENT_ID
+    fi
+
+    echo "Creating new OAuth2 client: $CLIENT_ID"
+        curl -s <%= skip_ssl_flag %> -H "Authorization:Bearer $ACCESS_TOKEN" \
+    -H"Content-Type:application/json" \
+    -H"Accept:application/json" \
+    -d '{
+      "client_id" : "'$CLIENT_ID'",
+      "client_secret" : "'$CLIENT_SECRET'",
+      "autoapprove" : "true",
+      "scope" : ["openid"],
+      "authorities" : ["uaa.none"],
+      "authorized_grant_types" : ["authorization_code"],
+      "access_token_validity": 43200,
+      "redirect_uri": ["https://grafana.<%= sys_domain %>"]
+    }' \
+    -X POST https://uaa.<%= sys_domain %>/oauth/clients
+}
+
+createClient <%= grafana_id %> <%= grafana_secret %>
